@@ -18,4 +18,4 @@ Methods:
 Results:
 - The decision tree model estimated that the expected total costs of Oseltamivir treatment were $86.50, while the expected total costs of Zanamivir treatment were $95.25. The expected life years gained for Oseltamivir were 2.6, while the expected life years gained for Zanamivir were 2.5.
 - The cost-effectiveness analysis revealed that Oseltamivir was the dominant treatment option, as it was less expensive and provided more life years gained compared to Zanamivir. 
-- Sensitivity analysis (to be updated)
+- Sensitivity analysis (in progress)
