@@ -1,0 +1,290 @@
+---
+title: "Treatment for Influenza"
+output: html_document
+date: "2023-03-27"
+---
+
+# Import and load packages
+library(ggplot2)
+library(lattice)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(reshape2)
+
+
+# Check for missing data
+is.na(df)
+
+# Check the data type
+typeof(df)
+
+# Vector of parameter inputs by creating new empty data frame
+input <- data.frame(
+
+  p.Oseltamivir_ADR = 0.20,     # Probability of adverse reaction with Treatment Oseltamivir 
+  p.Zanamivir_ADR = 0.35,        # Probability of adverse reaction with Zanamivir 
+  p.Oseltamivir_Cured = 0.85,   # Probability of being cured with Oseltamivir
+  p.Zanamivir_Cured = 0.75,      # Probability of being cured with Zanamivir
+  ly.Cured  = 3,            # Life years after being cured
+  ly.NotCured  = 0,         # Life years after not being cured
+  c.Oseltamivir = 40,         # Costs of Treatment Oseltamivir
+  c.Zanamivir = 55,            # Costs of Treatment Zanamivir
+  c.ADR = 50,              # Costs of adverse reaction
+  c.NoADR = 10,            # Costs of not having an adverse reaction
+  c.NotCured = 60,          # Costs of not being cured
+  c.Cured = 0,               # Costs of being cured
+  wtp = 200                # Willingness to pay per life year gained
+  )
+  
+# Decision tree function by converting object 'params' into list
+  dec_tree <- function(params){
+  with(
+    as.list(params),
+    {
+    
+ # Expected probabilities for each pathway
+ ## Pathways for Oseltamivir (Treatment A)
+ep1 <- (1 - p.Oseltamivir_ADR) * p.Oseltamivir_Cured                # Expected probability for Pathway 1
+ep2 <- (1 - p.Oseltamivir_ADR) * (1 - p.Oseltamivir_Cured)          # Expected probability for Pathway 2
+ep3 <- p.Oseltamivir_ADR * p.Oseltamivir_Cured                      # Expected probability for Pathway 3
+ep4 <- p.Oseltamivir_ADR * (1 - p.Oseltamivir_Cured)                # Expected probability for Pathway 4
+      
+ ## Pathways for Zanamivir (Treatment B)
+ep5 <- (1 - p.Zanamivir_ADR) * p.Zanamivir_Cured                      # Expected probability for Pathway 5
+ep6 <- (1 - p.Zanamivir_ADR) * (1 - p.Zanamivir_Cured)                # Expected probability for Pathway 6
+ep7 <- p.Zanamivir_ADR * p.Zanamivir_Cured                            # Expected probability for Pathway 7
+ep8 <- p.Zanamivir_ADR * (1 - p.Zanamivir_Cured)                      # Expected probability for Pathway 8
+      
+ # Total costs for each pathway
+ ## Total costs for Oseltamivir (Treatment A)
+tc1 <- c.Oseltamivir + c.NoADR + c.Cured                          # Total costs for Pathway 1
+tc2 <- c.Oseltamivir + c.NoADR + c.NotCured                       # Total costs for Pathway 2
+tc3 <- c.Oseltamivir + c.ADR + c.Cured                            # Total costs for Pathway 3
+tc4 <- c.Oseltamivir + c.ADR + c.NotCured                         # Total costs for Pathway 4
+      
+ ## Total costs for Zanamivir (Treatment B) (unweighted)
+tc5 <- c.Zanamivir + c.NoADR + c.Cured                              # Total costs for Pathway 5
+tc6 <- c.Zanamivir + c.NoADR + c.NotCured                           # Total costs for Pathway 6
+tc7 <- c.Zanamivir + c.ADR + c.Cured                                # Total costs for Pathway 7
+tc8 <- c.Zanamivir + c.ADR + c.NotCured                             # Total costs for Pathway 8      
+      
+      
+ # Expected Total Costs for Oseltamivir (Treatment A)
+etc.Oseltamivir <- (ep1 * tc1) + (ep2 * tc2) + (ep3 * tc3) + (ep4 * tc4)
+      
+ # Expected Total Costs for Zanamivir (Treatment B)
+etc.Zanamivir <- (ep5 * tc5) + (ep6 * tc6) + (ep7 * tc7) + (ep8 * tc8)
+
+ # Expected Life Years for Oseltamivir (Treatment A)
+ely.Oseltamivir <- (ep1 * ly.Cured) + (ep2 * ly.NotCured) + (ep3 * ly.Cured) + (ep4 * ly.NotCured)
+
+ # Expected Life Years for Zanamivir (Treatment B)
+ely.Zanamivir <- (ep5 * ly.Cured) + (ep6 * ly.NotCured) + (ep7 * ly.Cured) + (ep8 * ly.NotCured)
+
+
+ # Expected total costs, expected life years, incremental costs, incremental life years, and ICER 
+  C    <- c(etc.Oseltamivir, etc.Zanamivir)
+  LY   <- c(ely.Oseltamivir, ely.Zanamivir)
+  IC   <- etc.Oseltamivir - etc.Zanamivir
+  IE   <- ely.Oseltamivir - ely.Zanamivir
+  ICER <- (etc.Oseltamivir - etc.Zanamivir)/ (ely.Oseltamivir - ely.Zanamivir)
+      
+  names(C)    <- paste("C", c("Oseltamivir", "Zanamivir"), sep = "_")
+  names(LY)   <- paste("LY", c("Oseltamivir", "Zanamivir"), sep = "_")
+  names(IC)   <- paste("Incr Costs")
+  names(IE)   <- paste("Incr Life Years")
+  names(ICER) <- paste("ICER")
+      
+ # Generate the ouput
+      return(c(C, LY, IC, IE, ICER))
+    }
+)
+}
+
+# Print function
+   dec_tree(input)
+
+
+
+
+# Show the decision tree as a plot
+params <- list(
+
+  p.Oseltamivir_ADR = 0.20,     # Probability of adverse reaction with Treatment Oseltamivir 
+  p.Zanamivir_ADR = 0.35,        # Probability of adverse reaction with Zanamivir 
+  p.Oseltamivir_Cured = 0.85,   # Probability of being cured with Oseltamivir
+  p.Zanamivir_Cured = 0.75,      # Probability of being cured with Zanamivir
+  ly.Cured  = 3,            # Life years after being cured
+  ly.NotCured  = 0,         # Life years after not being cured
+  c.Oseltamivir = 40,         # Costs of Treatment Oseltamivir
+  c.Zanamivir = 55,            # Costs of Treatment Zanamivir
+  c.ADR = 50,              # Costs of adverse reaction
+  c.NoADR = 10,            # Costs of not having an adverse reaction
+  c.NotCured = 60,          # Costs of not being cured
+  c.Cured = 0,               # Costs of being cured
+  wtp = 200                # Willingness to pay per life year gained
+  )
+
+ # Define the decision options
+options <- data.frame(
+  Treatment = c("Oseltamivir", "Zanamivir"),
+  ADR = c("NoADR", "ADR"),
+  Cured = c("Cured", "NotCured")
+)
+
+ # Define the possible outcomes and their probabilities
+outcomes <- data.frame(
+  Treatment = rep(options$Treatment, each = 4),
+  ADR = rep(options$ADR, times = 2),
+  Cured = rep(options$Cured, times = 2),
+  Cost = c(100, 100, 150, 150, 120, 120, 180, 180),
+  LY = c(5, 5, 7, 7, 4, 4, 6, 6),
+  Prob = c(0.4, 0.1, 0.3, 0.2, 0.3, 0.1, 0.4, 0.2)
+)
+
+ # Define the value associated with each outcome
+values <- list(
+  Cost = list(
+    Oseltamivir = c(100, 150, 120, 180),
+    Zanamivir = c(80, 120, 100, 150)
+  ),
+  LY = list(
+    Oseltamivir = c(5, 7, 4, 6),
+    Zanamivir = c(4, 6, 5, 7)
+  )
+)
+
+ # Construct the decision tree
+tree <- rpart(
+  formula = Cost ~ Treatment + ADR + Cured,
+  data = outcomes,
+  weights = Prob,
+  parms = list(split = "information"),
+  control = rpart.control(minsplit = 1)
+)
+
+ # Plot the decision tree
+plot(tree)
+rpart.plot(tree)
+text(tree, use.n = TRUE, cex = 0.8)
+
+
+     
+     
+
+# One way sensitivity analysis
+params <- list(
+
+  p.Oseltamivir_ADR = 0.20,     # Probability of adverse reaction with Treatment Oseltamivir 
+  p.Zanamivir_ADR = 0.35,        # Probability of adverse reaction with Zanamivir 
+  p.Oseltamivir_Cured = 0.85,   # Probability of being cured with Oseltamivir
+  p.Zanamivir_Cured = 0.75,      # Probability of being cured with Zanamivir
+  ly.Cured  = 3,            # Life years after being cured
+  ly.NotCured  = 0,         # Life years after not being cured
+  c.Oseltamivir = 40,         # Costs of Treatment Oseltamivir
+  c.Zanamivir = 55,            # Costs of Treatment Zanamivir
+  c.ADR = 50,              # Costs of adverse reaction
+  c.NoADR = 10,            # Costs of not having an adverse reaction
+  c.NotCured = 60,          # Costs of not being cured
+  c.Cured = 0,               # Costs of being cured
+  wtp = 200                # Willingness to pay per life year gained
+  )
+#Run model with captured Total Costs across the ranges 0.50 to 1.00 for probability of cured with Treatment A
+p.Oseltamivir_Cured_range <- seq(0.00, 1.00, length.out=11) # Perform 11 calculations between 0.00 and 0.100.
+p.Oseltamivir_Cured_range
+
+p.Zanamivir_Cured_range <- seq(0.00, 1.00, length.out=11) # Perform 11 calculations between 0.00 and 0.100.
+p.Zanamivir_Cured_range
+
+
+#Generate matrix of inputs for decision tree
+m.owsa.input <- cbind(p.Oseltamivir_Cured = p.Oseltamivir_Cured_range, input[-3])
+m.owsa.input
+
+## Run model with captured Total Costs across the ranges 0.00 to 1.00 for probability of cured with Treatment A
+outcomes_TC <- t(apply(m.owsa.input, 1, dec_tree))[ , 1:2]  # t(x) is the transpose function [column 1 = c.Oseltamivir in the output]
+outcomes_TC
+
+#Apply for table 1
+apply.table1  <- (apply(m.owsa.input, 1, dec_tree)) # Note: This will give us 7 rows and 11 columns.
+apply.table1
+
+# Apply for table 2
+apply.table2  <- (apply(m.owsa.input, 1, dec_tree))[ , 1] 
+apply.table2
+
+
+# Plot results
+Strategies <- c("Treatment A = Oseltamivir", "Treatment B = Zanamivir")
+plot(p.Oseltamivir_Cured_range, outcomes_TC[ , 1], type="l", xlab="Prob of being Cured", ylab="Total Costs")
+lines(p.Oseltamivir_Cured_range, outcomes_TC[ , 2], col="red")
+legend("topright", Strategies, col=1:2, lty=c(1, 1), bty="n")
+
+
+
+
+
+
+# Tornado plot ICER for the sensitivity analysis
+# Define ranges
+  p.Oseltamivir_ADR = 0.20
+  p.Zanamivir_ADR = 0.35
+  p.Oseltamivir_Cured = 0.85
+  p.Zanamivir_Cured = 0.75
+  ly.Cured  = 3
+  ly.NotCured  = 0
+  c.Oseltamivir = 40
+  c.Zanamivir = 55
+  c.ADR = 50
+  c.NoADR = 10
+  c.NotCured = 60
+  c.Cured = 0
+  wtp = 200
+  
+p.Oseltamivir_ADR_range <- c(BaseCase = p.Oseltamivir_ADR, low = 0.15, high = 0.25)
+p.Zanamivir_ADR_range <- c(BaseCase = p.Zanamivir_ADR, low = 0.30, high = 0.45)
+p.Oseltamivir_Cured_range <- c(BaseCase = p.Oseltamivir_Cured, low = 0.75, high = 0.95)
+p.Zanamivir_Cured_range <- c(BaseCase = p.Zanamivir_Cured, low = 0.65, high = 0.85)
+ly.Cured_range <- c(BaseCase = ly.Cured, low = 2.75, high = 3.25)
+ly.NotCured_range <- c(BaseCase = ly.NotCured, low = -0.5, high = 0.5)
+c.Oseltamivir_range <- c(BaseCase = c.Oseltamivir, low = 35, high = 45)
+c.Zanamivir_range <- c(BaseCase = c.Zanamivir, low = 50, high = 60)
+c.ADR_range <- c(BaseCase = c.ADR, low = 45, high = 55)
+c.NoADR_range <- c(BaseCase = c.NoADR, low = 5, high = 15)
+c.NotCured_range <- c(BaseCase = c.NotCured, low = 55, high = 65)
+
+# Create data frame for plot
+data <- data.frame(
+  parameter = c(rep("p.Oseltamivir_ADR", 2), rep("p.Zanamivir_ADR", 2), 
+                rep("ly.Cured", 2), rep("ly.NotCured", 2), 
+                rep("p.Oseltamivir_Cured", 2), rep("p.Zanamivir_Cured", 2), 
+                rep("c.Oseltamivir", 2), rep("c.Zanamivir", 2), 
+                rep("c.ADR", 2), rep("c.NoADR", 2),
+                rep("c.NotCured", 2)),
+  value = c(p.Oseltamivir_ADR_range["low"], p.Oseltamivir_ADR_range["high"], 
+            p.Zanamivir_ADR_range["low"], p.Zanamivir_ADR_range["high"], 
+            p.Oseltamivir_Cured_range["low"], p.Oseltamivir_Cured_range["high"],
+            p.Zanamivir_Cured_range["low"], p.Zanamivir_Cured_range["high"], 
+            ly.Cured_range["low"], ly.Cured_range["high"], 
+            ly.NotCured_range["low"], ly.NotCured_range["high"], 
+            c.Oseltamivir_range["low"], c.Oseltamivir_range["high"], 
+            c.Zanamivir_range["low"], c.Zanamivir_range["high"], 
+            c.ADR_range["low"], c.ADR_range["high"], 
+            c.NotCured_range["low"], c.NotCured_range["high"],
+            c.NoADR_range["low"], c.NoADR_range["high"]),
+  label = c("Low", "High", "Low", "High", "Low", "High", "Low", "High", 
+            "Low", "High", "Low", "High", "Low", "High", "Low", "High",
+            "Low", "High","Low", "High","Low", "High"),
+  stringsAsFactors = FALSE
+)
+
+
+# Show tornado plot
+ggplot(data, aes(x = value, y = parameter, fill = label)) +
+  geom_col() +
+  scale_fill_manual(values = c("#0072B2", "#E69F00"), 
+                    labels = c("Low", "High")) +
+  labs(x = "Change in Parameter Value", y = "", 
+       title = "Tornado Plot", subtitle = "Base Case = BaseCase") +
+  theme_minimal()
